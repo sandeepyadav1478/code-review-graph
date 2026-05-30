@@ -1,6 +1,11 @@
 // sample.sv - SystemVerilog fixture for parser tests
 `timescale 1ns / 1ps
 
+// Package definitions (single-line; grammar is brittle on multi-line). These
+// make the imports below resolve to real package nodes, and exercise typedefs.
+package utils_pkg; typedef logic [7:0] data_byte_t; endpackage
+package arith_pkg; typedef enum logic [1:0] { IDLE, RUNNING, DONE } counter_state_t; typedef logic [15:0] counter_t; endpackage
+
 // File-level package import
 import utils_pkg::*;
 

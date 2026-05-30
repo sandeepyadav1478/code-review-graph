@@ -2575,6 +2575,70 @@ class TestVerilogParsing:
         assert a is not None and a.modifiers == "input"
         assert b is not None and b.modifiers == "output"
 
+    # --- Tier 2: packages, typedefs, modports --------------------------------
+
+    def _kind(self, name, verilog_kind, parent=None):
+        """Return the Function node with the given name and verilog_kind (and
+        optional parent), or None."""
+        for n in self.nodes:
+            if (
+                n.name == name
+                and n.extra.get("verilog_kind") == verilog_kind
+                and (parent is None or n.parent_name == parent)
+            ):
+                return n
+        return None
+
+    def test_package_definitions_are_class_nodes(self):
+        classes = {
+            n.name: n for n in self.nodes
+            if n.kind == "Class" and n.language == "verilog"
+        }
+        assert "arith_pkg" in classes
+        assert "utils_pkg" in classes
+
+    def test_package_import_resolves_to_definition(self):
+        # The arith_pkg IMPORTS_FROM edge now coexists with a real package node.
+        import_targets = {
+            e.target for e in self.edges if e.kind == "IMPORTS_FROM"
+        }
+        assert "arith_pkg" in import_targets
+        pkg = next(
+            (n for n in self.nodes
+             if n.kind == "Class" and n.name == "arith_pkg"),
+            None,
+        )
+        assert pkg is not None, "arith_pkg import has no matching package node"
+
+    def test_typedefs_in_package(self):
+        counter_t = self._kind("counter_t", "typedef", "arith_pkg")
+        state_t = self._kind("counter_state_t", "typedef", "arith_pkg")
+        byte_t = self._kind("data_byte_t", "typedef", "utils_pkg")
+        assert counter_t is not None
+        assert state_t is not None
+        assert byte_t is not None
+
+    def test_enum_members_are_not_typedefs(self):
+        # Regression guard: a DFS over type_declaration would wrongly grab the
+        # first enum member (IDLE) instead of the typedef name. Ensure enum
+        # members never surface as typedef nodes.
+        for member in ("IDLE", "RUNNING", "DONE"):
+            assert self._kind(member, "typedef") is None, (
+                f"enum member {member} must not be a typedef node"
+            )
+
+    def test_modports_in_interface(self):
+        master = self._kind("master", "modport", "BusIf")
+        slave = self._kind("slave", "modport", "BusIf")
+        assert master is not None
+        assert slave is not None
+
+    def test_typedef_and_modport_have_contains_edge(self):
+        contains = [e for e in self.edges if e.kind == "CONTAINS"]
+        targets = {e.target.split(".")[-1] for e in contains}
+        for nm in ("counter_t", "data_byte_t", "master", "slave"):
+            assert nm in targets, f"no CONTAINS edge for {nm}"
+
 class TestSQLParsing:
     def setup_method(self):
         self.parser = CodeParser()

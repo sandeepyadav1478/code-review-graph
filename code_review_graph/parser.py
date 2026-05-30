@@ -229,7 +229,10 @@ _CLASS_TYPES: dict[str, list[str]] = {
     "julia": [
         "struct_definition", "abstract_definition", "module_definition",
     ],
-    "verilog": ["module_declaration", "interface_declaration", "class_declaration"],
+    "verilog": [
+        "module_declaration", "interface_declaration", "class_declaration",
+        "package_declaration",
+    ],
     # GDScript: inner classes use ``class Name:`` (class_definition); the
     # file-level ``class_name Name`` gives the script itself an identity.
     "gdscript": ["class_definition", "class_name_statement"],
@@ -5369,6 +5372,39 @@ class CodeParser:
                             )
             return True
 
+        # --- Typedefs / enums / structs ---
+        # Grammar: data_declaration > type_declaration >
+        #   [typedef, data_type, simple_identifier, ;]. The typedef name is the
+        # DIRECT-child simple_identifier; a DFS would wrongly return the first
+        # enum member (e.g. IDLE) nested inside the data_type, so iterate direct
+        # children only.
+        if node_type == "type_declaration":
+            tname = None
+            ttype = None
+            for sub in child.children:
+                if sub.type == "simple_identifier":
+                    tname = _decode(sub)
+                elif sub.type == "data_type":
+                    ttype = _decode(sub)
+            _emit(tname, child, "typedef", None, ttype)
+            return True
+
+        # --- Modports (inside an interface) ---
+        # Grammar: modport_declaration > modport_item >
+        #   modport_identifier > modport_identifier > simple_identifier.
+        # One modport_declaration may hold several modport_item children.
+        if node_type == "modport_declaration":
+            for mi in child.children:
+                if mi.type != "modport_item":
+                    continue
+                mname = None
+                for sub in mi.children:
+                    if sub.type == "modport_identifier":
+                        mname = _find_simple_identifier(sub)
+                        break
+                _emit(mname, mi, "modport", None, None)
+            return True
+
         return False
 
     def _collect_file_scope(
@@ -6019,6 +6055,13 @@ class CodeParser:
                                     if ss.type == "simple_identifier":
                                         return ss.text.decode("utf-8", errors="replace")
                                 return sub.text.decode("utf-8", errors="replace")
+            # package_declaration: name is in package_identifier > simple_identifier
+            if node.type == "package_declaration":
+                for child in node.children:
+                    if child.type == "package_identifier":
+                        for ss in child.children:
+                            if ss.type == "simple_identifier":
+                                return ss.text.decode("utf-8", errors="replace")
             # task_declaration: name is in task_body_declaration > task_identifier
             if node.type == "task_declaration":
                 for child in node.children:
