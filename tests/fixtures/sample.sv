@@ -1,8 +1,8 @@
 // sample.sv - SystemVerilog fixture for parser tests
 `timescale 1ns / 1ps
 
-// Package definitions (single-line; grammar is brittle on multi-line). These
-// make the imports below resolve to real package nodes, and exercise typedefs.
+// Package definitions kept compact on single lines. These make the imports
+// below resolve to real package nodes, and exercise typedefs.
 package utils_pkg; typedef logic [7:0] data_byte_t; endpackage
 package arith_pkg; typedef enum logic [1:0] { IDLE, RUNNING, DONE } counter_state_t; typedef logic [15:0] counter_t; endpackage
 
@@ -81,8 +81,8 @@ module FIFOController #(parameter int DEPTH = 16, parameter int WIDTH = 8) (
         empty = (count == 0);
     end
 
-    // Tier 3 verification constructs (single-line; grammar is brittle on
-    // multi-line). Each becomes a Function node tagged with verilog_kind.
+    // Tier 3 verification constructs (kept compact on single lines). Each
+    // becomes a Function node tagged with verilog_kind.
     covergroup cg_count @(posedge clk); cp: coverpoint count; endgroup
     property p_full; @(posedge clk) full |-> !empty; endproperty
     sequence s_wr; wr_en ##1 !full; endsequence
@@ -91,16 +91,15 @@ endmodule
 
 // Top-level wrapper: multi-module hierarchy with wire feedthrough.
 // stage_data/stage_valid carry a signal from the Adder output into the
-// FIFOController input. Instantiation port maps kept single-line (grammar
-// is brittle on multi-line connections).
+// FIFOController input. Instantiation port maps kept compact on single lines.
 module Top #(parameter int WIDTH = 8) (input logic clk, input logic rst_n, input logic [WIDTH-1:0] din, output logic [WIDTH-1:0] dout);
     wire [WIDTH-1:0] stage_data;
     wire             stage_valid;
     localparam int   STAGES = 2;
     Adder #(.WIDTH(WIDTH)) u_add (.a(din), .b(din), .sum(stage_data));
     FIFOController #(.WIDTH(WIDTH)) u_fifo (.clk(clk), .rst_n(rst_n), .data_in(stage_data), .wr_en(stage_valid), .rd_en(stage_valid), .data_out(dout), .full(), .empty());
-    // Tier 3: instantiation inside a generate block. The grammar parses this
-    // as interface_instantiation; recursion must still descend to emit the
-    // CALLS edge to Adder and REFERENCES edges for the named connections.
+    // Tier 3: instantiation inside a generate block. Recursion must descend
+    // into the generate body to emit the CALLS edge to Adder and the
+    // REFERENCES edges for the named connections.
     generate genvar gi; for (gi = 0; gi < STAGES; gi++) begin: gblk Adder #(.WIDTH(WIDTH)) g_add (.a(din), .b(din), .sum(stage_data)); end endgenerate
 endmodule

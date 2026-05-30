@@ -309,10 +309,15 @@ def analyze_changes(
         for fp in changed_files:
             changed_nodes.extend(store.get_nodes_by_file(fp))
 
-    # Filter to functions/tests for risk scoring (skip File nodes).
+    # Filter to functions/tests for risk scoring (skip File nodes). Verilog/
+    # SystemVerilog signal-level nodes (ports/nets/params, modeled as Function
+    # nodes) are declarations, not callable functions: they have no TESTED_BY
+    # edges, so including them would flood the output with bogus "test gap"
+    # entries on any .sv edit.
     changed_funcs = [
         n for n in changed_nodes
         if n.kind in ("Function", "Test", "Class")
+        and not n.extra.get("verilog_kind")
     ]
 
     # Cap to prevent O(N*M) query explosion on large PRs.

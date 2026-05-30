@@ -830,9 +830,19 @@ class GraphStore:
         total_nodes = self._conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
         total_edges = self._conn.execute("SELECT COUNT(*) FROM edges").fetchone()[0]
 
+        # Verilog/SystemVerilog signal-level nodes (ports/nets/params/etc.) are
+        # stored as kind='Function' with a ``verilog_kind`` discriminator in
+        # ``extra``. Re-bucket them under 'Signal' so they do not inflate the
+        # user-facing Function count. (LIKE on the JSON text avoids a json1
+        # dependency; the key is a fixed literal, not user input.)
         nodes_by_kind: dict[str, int] = {}
-        for row in self._conn.execute("SELECT kind, COUNT(*) as cnt FROM nodes GROUP BY kind"):
-            nodes_by_kind[row["kind"]] = row["cnt"]
+        for row in self._conn.execute(
+            "SELECT CASE WHEN extra LIKE '%\"verilog_kind\"%' THEN 'Signal'"
+            " ELSE kind END AS k, COUNT(*) as cnt FROM nodes"
+            " GROUP BY CASE WHEN extra LIKE '%\"verilog_kind\"%' THEN 'Signal'"
+            " ELSE kind END"
+        ):
+            nodes_by_kind[row["k"]] = row["cnt"]
 
         edges_by_kind: dict[str, int] = {}
         for row in self._conn.execute("SELECT kind, COUNT(*) as cnt FROM edges GROUP BY kind"):
@@ -884,6 +894,10 @@ class GraphStore:
             "line_start IS NOT NULL",
             "line_end IS NOT NULL",
             "(line_end - line_start + 1) >= ?",
+            # Exclude Verilog/SystemVerilog signal-level nodes (ports/nets/params,
+            # modeled as Function nodes): a multi-line covergroup/typedef is not
+            # an oversized function to decompose.
+            "extra NOT LIKE '%\"verilog_kind\"%'",
         ]
         params: list = [min_lines]
 

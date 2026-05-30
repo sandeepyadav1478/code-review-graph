@@ -630,7 +630,12 @@ def suggest_refactorings(store: GraphStore) -> list[dict[str, Any]]:
         }
 
         # Check functions called only by members of a different community.
-        all_funcs = store.get_nodes_by_kind(["Function"])
+        # Skip Verilog/SystemVerilog signal-level nodes (ports/nets/params,
+        # modeled as Function nodes) -- "move wire X to community B" is nonsense.
+        all_funcs = [
+            n for n in store.get_nodes_by_kind(["Function"])
+            if not n.extra.get("verilog_kind")
+        ]
 
         for fnode in all_funcs:
             f_community = node_community.get(fnode.qualified_name)

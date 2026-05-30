@@ -2698,6 +2698,111 @@ class TestVerilogParsing:
             "expected a CALLS edge for the generate-block Adder instantiation"
         )
 
+    # --- Regression tests for review findings --------------------------------
+
+    def test_multiname_non_ansi_ports(self, tmp_path):
+        # Multi-name non-ANSI ports use list_of_variable_identifiers /
+        # list_of_variable_port_identifiers (not list_of_port_identifiers).
+        # Regression: these were previously dropped entirely.
+        src = (
+            "module M(a, b, c, d);\n"
+            "  input  a, b;\n"
+            "  output c, d;\n"
+            "endmodule\n"
+        )
+        f = tmp_path / "multiname.sv"
+        f.write_text(src)
+        nodes, _ = self.parser.parse_file(f)
+        ports = {
+            n.name: n for n in nodes
+            if n.extra.get("verilog_kind") == "port"
+        }
+        for nm in ("a", "b", "c", "d"):
+            assert nm in ports, f"non-ANSI port {nm} was dropped"
+        assert ports["a"].modifiers == "input"
+        assert ports["b"].modifiers == "input"
+        assert ports["c"].modifiers == "output"
+        assert ports["d"].modifiers == "output"
+
+    def test_net_typed_ansi_port_datatype(self, tmp_path):
+        # Net-typed ANSI ports keep their type under net_port_type1. Regression:
+        # the type was read as the stale preceding port's type, and that wrong
+        # type then poisoned following headerless ports.
+        src = (
+            "module M(input logic [7:0] a, output wire [3:0] b, input c);\n"
+            "endmodule\n"
+        )
+        f = tmp_path / "nettype.sv"
+        f.write_text(src)
+        nodes, _ = self.parser.parse_file(f)
+        ports = {
+            n.name: n for n in nodes
+            if n.extra.get("verilog_kind") == "port"
+        }
+        assert "wire" in (ports["b"].return_type or ""), ports["b"].return_type
+        assert "logic" not in (ports["b"].return_type or "")
+
+    def test_multiline_constructs_parse(self, tmp_path):
+        # Regression guard: multi-line packages, port lists, and instantiation
+        # port maps parse the same as single-line. The fixture is single-line
+        # only for compactness, NOT because multi-line is unsupported.
+        src = (
+            "package p;\n"
+            "  typedef logic [7:0]\n"
+            "    byte_t;\n"
+            "endpackage\n"
+            "module Sub(input logic [7:0] x, output logic [7:0] y);\n"
+            "  assign y = x;\n"
+            "endmodule\n"
+            "module Top(\n"
+            "    input  logic [7:0] din,\n"
+            "    output logic [7:0] dout\n"
+            ");\n"
+            "  wire [7:0] mid;\n"
+            "  Sub u_sub (\n"
+            "    .x(din),\n"
+            "    .y(mid)\n"
+            "  );\n"
+            "endmodule\n"
+        )
+        f = tmp_path / "multiline.sv"
+        f.write_text(src)
+        nodes, edges = self.parser.parse_file(f)
+        assert any(n.kind == "Class" and n.name == "p" for n in nodes)
+        ports = {n.name for n in nodes
+                 if n.extra.get("verilog_kind") == "port"}
+        assert {"din", "dout", "x", "y"} <= ports
+        assert any(
+            e.kind == "CALLS" and "Top" in e.source and "Sub" in e.target
+            for e in edges
+        ), "multi-line instantiation lost its CALLS edge"
+        ref_targets = {e.target.split(".")[-1] for e in edges
+                       if e.kind == "REFERENCES"}
+        assert "din" in ref_targets and "mid" in ref_targets
+
+    def test_slice_index_not_referenced(self):
+        # Bit/part-select index constants (the WIDTH in wr_ptr[WIDTH-1:0]) must
+        # not surface as data-flow REFERENCES targets.
+        targets = self._ref_targets()
+        assert "wr_ptr" in targets
+        assert "WIDTH" not in targets
+
+    def test_signals_excluded_from_dead_code_and_stats(self):
+        # Pollution guards: signal nodes (ports/nets/params, modeled as Function
+        # nodes) must not be flagged as dead code or counted as Functions.
+        from code_review_graph.graph import GraphStore
+        from code_review_graph.refactor import find_dead_code
+        store = GraphStore(":memory:")
+        store.store_file_nodes_edges(
+            str(FIXTURES / "sample.sv"), self.nodes, self.edges,
+        )
+        dead_names = {d["name"] for d in find_dead_code(store)}
+        for sig in ("clk", "overflow_flag", "DEPTH", "stage_data"):
+            assert sig not in dead_names, f"signal {sig} wrongly flagged dead"
+        stats = store.get_stats()
+        assert stats.nodes_by_kind.get("Signal", 0) > 0
+        assert "Function" in stats.nodes_by_kind  # real funcs still counted
+
 class TestSQLParsing:
     def setup_method(self):
         self.parser = CodeParser()

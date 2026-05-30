@@ -5276,7 +5276,15 @@ class CodeParser:
                         for hh in sub.children:
                             if hh.type == "port_direction":
                                 pdir = _decode(hh).strip() or pdir
-                            elif hh.type == "data_type":
+                            elif hh.type in (
+                                "data_type", "net_port_type1",
+                                "variable_port_type", "data_type_or_implicit1",
+                            ):
+                                # Net-typed ports (``output wire [3:0] b``) keep
+                                # their type under net_port_type1, not a direct
+                                # data_type child — read both so the datatype is
+                                # correct and not stale-inherited from the prior
+                                # port.
                                 ptype = _decode(hh)
                     elif sub.type == "port_identifier":
                         pname = _find_simple_identifier(sub)
@@ -5295,13 +5303,27 @@ class CodeParser:
             for sub in child.children:
                 if sub.type == "data_type":
                     dtype = _decode(sub)
-                elif sub.type == "list_of_port_identifiers":
+            # The identifier list uses different node types by form:
+            #   ``input a;``      -> list_of_port_identifiers (port_identifier)
+            #   ``input a, b;``   -> list_of_variable_identifiers (bare
+            #                        simple_identifier leaves)
+            #   ``output c, d;``  -> list_of_variable_port_identifiers
+            #                        (port_identifier). Walk all three so
+            #   multi-name declarations are not silently dropped.
+            for sub in child.children:
+                if sub.type in (
+                    "list_of_port_identifiers",
+                    "list_of_variable_identifiers",
+                    "list_of_variable_port_identifiers",
+                ):
                     for pid in sub.children:
                         if pid.type == "port_identifier":
                             _emit(
-                                _find_simple_identifier(pid), child,
+                                _find_simple_identifier(pid), pid,
                                 "port", direction, dtype,
                             )
+                        elif pid.type == "simple_identifier":
+                            _emit(_decode(pid), pid, "port", direction, dtype)
             return True
 
         # --- Parameters / localparams (header #(...) and module body) ---
@@ -5427,6 +5449,14 @@ class CodeParser:
                     seen.add(_decode(node))
                     return
                 for sub in node.children:
+                    # Skip bit/part-select index expressions (e.g. the WIDTH in
+                    # ``wr_ptr[WIDTH-1:0]``): those are sizing constants, not the
+                    # net wired to the port.
+                    if sub.type in (
+                        "select1", "select", "bit_select",
+                        "constant_range", "constant_expression",
+                    ):
+                        continue
                     _collect_idents(sub)
 
             _collect_idents(expr)
