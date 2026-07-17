@@ -77,7 +77,6 @@ Important local-branch conclusions:
 | `771307e` | issue #612 | Capture bare, member, chained, and null-conditional C# receiver calls with correct caller attribution; implemented red/green with focused tests. |
 | `eeef686` | issue #613 | Keep packaged documentation fallback available through the real MCP wrapper; implemented red/green with an installed-layout regression. |
 | `571f665` | content-equivalent/rebased port of PR #578 | Replace regex JSONC stripping with a string-aware scanner so URLs and comment-like string contents survive; import-neighborhood context differs from the source patch. |
-| `9ef6641` | PR #621 / issue #620 | Add `commandWindows` hook forms that drain stdin and fail open; exact contributor commit. Local Codex schema inspection confirms the field, but Windows execution still requires CI. |
 | `df87b60`, `e5f563b` | PR #563 | Generate the uppercase `SKILL.md` filename required by the [Claude Code skills documentation](https://code.claude.com/docs/en/skills) and update regressions. This does not adopt PR #562's unnecessary lowercasing of the display name. |
 | `90408c9` | PR #354 | Refuse and preserve valid top-level arrays/scalars, while treating empty/comment-only configs as fresh objects. Conflict resolution retained PR #578's stronger string-aware JSONC parser. Production fixes for #312/#350 were intentionally omitted because they are already on `main`; their regressions remain. |
 | `0abd789` | PR #353 | Persist Kotlin/C# annotations using the established metadata shape and resolve C# namespace importers. This does not claim to solve the remaining impact-radius design in #310. |
@@ -131,6 +130,11 @@ The routing groups are not blanket approvals. Material non-selection decisions:
 - Draft PR #618 is stronger than #566 for Git paths because it uses NUL-delimited
   bytes and `os.fsdecode`; it remains separate until its draft/CI state and
   overlap with branch/tracked-output behavior are resolved.
+- PR #621 is the focused Windows Codex-hook candidate, but target-native command
+  execution was not covered by this branch's Linux CI. Its contributor-authored
+  patch was removed from this integration and moved to dedicated
+  [draft PR #626](https://github.com/tirth8205/code-review-graph/pull/626) for
+  Windows testing.
 - PRs #595, #597, and #596 form a promising Windows daemon sequence, but they
   require genuine Windows execution and should not be hidden inside this
   cross-platform reconciliation.
@@ -181,7 +185,7 @@ All 84 open issues were read and classified exactly once:
 
 Selected patches address or materially advance #523 (visualization), #549 and
 #558 (portable hooks), #574 (PHP imports), #515 (TESTED_BY via the #559 subset),
-#553 (JSONC), #612, #613, #620, and #295. PR #353 advances only the namespace
+#553 (JSONC), #612, #613, and #295. PR #353 advances only the namespace
 importer portion of #310; its impact-radius/detect-changes BFS remains open.
 Issues #561 and #567 remain unaddressed because PRs #562 and #568 are absent.
 Issue #622's collision/overload problem is intentionally deferred because the
@@ -204,8 +208,9 @@ and #405:
   current cap implementation.
 - #318 and #410 support trustworthy status/doctor UX, while strengthening the
   requirement that diagnostics be non-mutating and fail honestly.
-- #501 supports portable PowerShell/Codex hooks and informed the selection of
-  PR #621; #405 shows the hook contract still needs clearer documentation.
+- #501 supports portable PowerShell/Codex hooks and informed the dedicated
+  validation path for PR #621; #405 shows the hook contract still needs clearer
+  documentation.
 - #464 and #137 reinforce worktree/monorepo-safe path and registry behavior.
 - #376 and #355 reinforce explicit inclusion/exclusion semantics; they do not
   justify hiding source paths with broad ignore patterns.
@@ -279,7 +284,8 @@ Package inspection also found pre-existing maintainer-only `.beads` hooks in the
 sdist; `crg-8u4` tracks the manifest policy fix. Neither is hidden as a passing
 claim.
 
-Windows hook command execution cannot be claimed from this macOS host or the
-current Linux-only GitHub matrix. The PR should remain a draft pending
-Windows-specific verification and maintainer review; source PRs/issues should
-not be closed before merge.
+The Windows hook patch from PR #621 is intentionally absent from this
+integration. It remains in
+[draft PR #626](https://github.com/tirth8205/code-review-graph/pull/626) until
+target-native CI and maintainer review verify command execution, stdin draining,
+failure behavior, and upgrades from existing Unix-only hook entries.

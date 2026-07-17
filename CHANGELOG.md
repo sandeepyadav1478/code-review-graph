@@ -14,8 +14,7 @@
   TESTED_BY edges for test blocks embedded in ordinary source files (PR #393).
 - Hardened generated skills/configuration: uppercase `SKILL.md` (PR #563),
   string-safe JSONC plus top-level and nested-container data-preservation guards
-  (#553, PR #354), portable PATH-aware hooks (PR #565), and Windows Codex hook
-  commands (#620/PR #621).
+  (#553, PR #354), and portable PATH-aware hooks (PR #565).
 - Packaged documentation remains reachable through the MCP wrapper (#613),
   Action comments render repository-relative paths, and both visualization
   templates select the graph SVG specifically (PR #564).
